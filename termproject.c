@@ -56,7 +56,7 @@ void evaulation();
 /*  create_processes(): 프로세스 6개 생성 & 초기 변수값 설정 - random
     Process ID, Arrival time, CPU burst time, I/O burst time, I/0 request time, Priority
     pid는 온 순서대로 정수값 설정, Arrival time & CPU burst time & I/O burst, request time & Priority -> random 값
-    CPU burst time은 1에서 20 범위 설정 -> 지나치게 늘어지는 것을 막기 위함
+    CPU burst time은 1에서 10 범위 설정 -> 지나치게 늘어지는 것을 막기 위함
     I/O의 경우, 발생 횟수를 2~5회 범위 내 random 값 지정 -> 시간 소요 줄이기 위함
     Priority의 경우, process의의 총 갯수 n 받아 0~(n-1) 중 random하게 배정
 */
@@ -165,7 +165,7 @@ void fcfs(Process *p, Result *r){
     printf("0");
     if(p_start[0]!=0) printf("  %d", p_start[0]);   //  P0가 0에 시작하지 않을 때 Gantt-Chart 시간 흐름
     for(int i=0;i<p_cnt;i++) printf("   %d",p_end[i]);
-    printf("\n\n");
+    printf("\n\n\n");
 
     //  result_arr[0]에 fcfs 결과값 저장장
     strcpy(r->algorithm,"FCFS");
@@ -179,7 +179,61 @@ void fcfs(Process *p, Result *r){
 
 //  sjf_np(): non-preemptive sjf algorithm 구현
 void sjf_np(Process *p, Result *r){
-    
+    Ready_queue *r_q = config(p_cnt+1); //  ready queue 생성 - config()
+    for(int i=0;i<p_cnt;i++) enqueue(r_q, p[i]);    //  enqueue
+
+    qsort(r_q->p_arr, r_q->cnt, sizeof(Process), sjf_compare); //  cpu-burst 기준 정렬
+
+    int completed=0, current=0; //  완료된 프로세스 갯수, 현재 시각
+    float total_wait=0, total_turnaround=0; //  result 위한 변수
+    int p_start[p_cnt], p_end[p_cnt];  //  Gantt-Chart 위한 변수수
+
+    printf("\nGantt-Chart : SJF(Non-prremptive)\n");
+
+    while(completed<p_cnt){
+        int flag=0;
+        for(int i=0;i<p_cnt;i++){
+            Process *f_p = &r_q->p_arr[i];
+
+            if(f_p->remaining_time!=0 && f_p->arrival_time <= current){
+                p_start[completed] = current;
+                if(completed==0 && p_start[0]!=0) printf(" | ");     //  첫 프로세스가 0에서 시작하지 않을 때
+
+                f_p->waiting_time = current - f_p->arrival_time;    //  대기 시간 계산
+                while(f_p->remaining_time){ //  cpu-burst time이 다할 때까지 시간 흐름
+                    f_p->remaining_time--;
+                    f_p->turnaround_time++;
+                    current++;
+                }
+                f_p->turnaround_time = current; //  종료시간 계산
+                p_end[completed] = current; //  Gantt-Chart 위해 각각 종료 시점 기억해두기
+
+                total_wait += f_p->waiting_time;
+                total_turnaround += f_p->turnaround_time;
+                completed++;
+                flag=1;
+
+                printf("| P%d",f_p->pid);
+            }
+        }
+        if(!flag) current++;    //  실행 불가하므로 1초 증가가
+    }
+    printf("|\n");
+
+    //  Gantt-Chart 시간 흐름
+    printf("0");
+    if(p_start[0]!=0) printf("  %d", p_start[0]);   //  P0가 0에 시작하지 않을 때 Gantt-Chart 시간 흐름
+    for(int i=0;i<p_cnt;i++) printf("   %d",p_end[i]);
+    printf("\n\n\n");
+
+    //  result_arr[0]에 sjf_np 결과값 저장장
+    strcpy(r->algorithm,"SJF(Non-preemptive)");
+    r->avg_waiting_time = total_wait/p_cnt;
+    r->avg_turnaround_time = total_turnaround/p_cnt;
+
+    //  할당된 메모리 해제제
+    free(r_q->p_arr);
+    free(r_q);
 }
 
 //  sjf_p(): preemptive sjf algorithm 구현

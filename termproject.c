@@ -42,8 +42,6 @@ Ready_queue *config(int capacity);
 void enqueue(Ready_queue *r_q, Process p);
 void schedule(Process *p, Result *r);
 int fcfs_compare(const void *a, const void *b);
-int sjf_compare(const void *a, const void *b);
-int priority_compare(const void *a, const void *b);
 void fcfs(Process *p, Result *r);
 void sjf_np(Process *p, Result *r);
 void sjf_p(Process *p,  Result *r);
@@ -61,6 +59,7 @@ void evaulation();
     Priority의 경우, process의의 총 갯수 n 받아 0~(n-1) 중 random하게 배정
 */
 void create_processes(Process *p){
+    printf("process\tarrival\tcpu\tpriority\n");
     for(int i=0;i<p_cnt;i++){
         p[i].pid = i;
         p[i].arrival_time = rand() % 10;
@@ -72,6 +71,8 @@ void create_processes(Process *p){
         p[i].remaining_time = p[i].cpu_burst_time;
         p[i].turnaround_time = 0;
         p[i].waiting_time = 0;
+
+        printf("%d\t%d\t%d\t%d\n",p[i].pid,p[i].arrival_time,p[i].cpu_burst_time,p[i].priority);
     }
 }
 
@@ -97,21 +98,11 @@ void enqueue(Ready_queue *r_q, Process p){
     r_q->cnt++;
 }
 
-//  fcfs,sjf,priority에서 쓰일 qsort를 위한 compare
+//  fcfs,priority에서 쓰일 qsort를 위한 compare
 int fcfs_compare(const void *a, const void *b){
     Process *p1 = (Process*)a;
     Process *p2 = (Process*)b;
     return p1->arrival_time - p2->arrival_time;
-}
-int sjf_compare(const void *a, const void *b){
-    Process *p1 = (Process*)a;
-    Process *p2 = (Process*)b;
-    return p1->cpu_burst_time - p2->cpu_burst_time;
-}
-int priority_compare(const void *a, const void *b){
-    Process *p1 = (Process*)a;
-    Process *p2 = (Process*)b;
-    return p1->priority - p2->priority;
 }
 
 /*  schedule(): CPU 스케줄링 알고리즘 구현
@@ -139,7 +130,7 @@ void fcfs(Process *p, Result *r){
 
     printf("\nGantt-Chart : FCFS\n");
 
-    for(int i=0;i<r_q->cnt;i++){
+    for(int i=0;i<p_cnt;i++){
         Process *f_p = &r_q->p_arr[i];
         while(current<f_p->arrival_time) current++;
 
@@ -157,7 +148,7 @@ void fcfs(Process *p, Result *r){
 
         total_wait += f_p->waiting_time;
         total_turnaround += f_p->turnaround_time;
-        printf("| P%d ",i); //  Gantt-Chart 프로세스 흐름
+        printf("| P%d ",f_p->pid); //  Gantt-Chart 프로세스 흐름
     }
     printf("|\n");
 
@@ -182,41 +173,48 @@ void sjf_np(Process *p, Result *r){
     Ready_queue *r_q = config(p_cnt+1); //  ready queue 생성 - config()
     for(int i=0;i<p_cnt;i++) enqueue(r_q, p[i]);    //  enqueue
 
-    qsort(r_q->p_arr, r_q->cnt, sizeof(Process), sjf_compare); //  cpu-burst 기준 정렬
-
     int completed=0, current=0; //  완료된 프로세스 갯수, 현재 시각
     float total_wait=0, total_turnaround=0; //  result 위한 변수
     int p_start[p_cnt], p_end[p_cnt];  //  Gantt-Chart 위한 변수수
 
-    printf("\nGantt-Chart : SJF(Non-prremptive)\n");
+    printf("\nGantt-Chart : SJF(Non-preemptive)\n");
 
     while(completed<p_cnt){
-        int flag=0;
+        int flag=-1;
+        int min = 100;
+        
         for(int i=0;i<p_cnt;i++){
             Process *f_p = &r_q->p_arr[i];
-
-            if(f_p->remaining_time!=0 && f_p->arrival_time <= current){
-                p_start[completed] = current;
-                if(completed==0 && p_start[0]!=0) printf(" | ");     //  첫 프로세스가 0에서 시작하지 않을 때
-
-                f_p->waiting_time = current - f_p->arrival_time;    //  대기 시간 계산
-                while(f_p->remaining_time){ //  cpu-burst time이 다할 때까지 시간 흐름
-                    f_p->remaining_time--;
-                    f_p->turnaround_time++;
-                    current++;
+            if(f_p->remaining_time!=0 && f_p->arrival_time<=current){   //  끝나지 않았고, 도착했다면
+                if(f_p->cpu_burst_time<min){    //  제일 작다면
+                    min = f_p->cpu_burst_time;
+                    flag = i;
                 }
-                f_p->turnaround_time = current; //  종료시간 계산
-                p_end[completed] = current; //  Gantt-Chart 위해 각각 종료 시점 기억해두기
-
-                total_wait += f_p->waiting_time;
-                total_turnaround += f_p->turnaround_time;
-                completed++;
-                flag=1;
-
-                printf("| P%d",f_p->pid);
             }
         }
-        if(!flag) current++;    //  실행 불가하므로 1초 증가가
+
+        if(flag==-1){   //  실행 불가 -> +1초초
+            current++;
+            continue;
+        }
+
+        Process *r_p = &r_q->p_arr[flag];
+        p_start[completed] = current;   //  시작점 저장장
+        if(completed==0 && p_start[0]!=0) printf(" | ");    //  0에 시작하지 않을 때 Gantt-Chart 프로세스 흐름
+
+        r_p->waiting_time = current - r_p->arrival_time;
+        while(r_p->remaining_time>0){   //  cpu burst 끝날 때까지 시간 증가가
+            r_p->remaining_time--;
+            current++;
+        }
+
+        r_p->turnaround_time = current;
+        p_end[completed] = current; //  종료지점 저장장
+
+        total_wait += r_p->waiting_time;
+        total_turnaround += r_p->turnaround_time;
+        completed++;
+        printf("| P%d", r_p->pid);
     }
     printf("|\n");
 
@@ -226,7 +224,7 @@ void sjf_np(Process *p, Result *r){
     for(int i=0;i<p_cnt;i++) printf("   %d",p_end[i]);
     printf("\n\n\n");
 
-    //  result_arr[0]에 sjf_np 결과값 저장장
+    //  result_arr[1]에 sjf_np 결과값 저장장
     strcpy(r->algorithm,"SJF(Non-preemptive)");
     r->avg_waiting_time = total_wait/p_cnt;
     r->avg_turnaround_time = total_turnaround/p_cnt;
@@ -238,11 +236,145 @@ void sjf_np(Process *p, Result *r){
 
 //  sjf_p(): preemptive sjf algorithm 구현
 void sjf_p(Process *p, Result *r){
+    Ready_queue *r_q = config(p_cnt+1); //  ready queue 생성 - config()
+    for(int i=0;i<p_cnt;i++) enqueue(r_q, p[i]);    //  enqueue
 
+    int completed=0, current=0, finish_time=0; //  완료된 프로세스 갯수, 현재 시각
+    float total_wait=0, total_turnaround=0; //  result 위한 변수
+    int p_start[p_cnt], p_started[p_cnt], gantt_chart[200];  //  Gantt-Chart 위한 변수수
+
+    for(int i=0;i<p_cnt;i++){
+        p_start[i] = -1, p_started[i]=0;    //  시작 지점은 0일 수도 있으니 -1, 시작 여부는 0으로 세팅팅
+    }
+
+    printf("\nGantt-Chart : SJF(preemptive)\n");
+    
+    while(completed<p_cnt){
+        int flag=-1;
+        int min = 100;
+        for(int i=0;i<p_cnt;i++){
+            Process *f_p = &r_q->p_arr[i];
+            if(f_p->remaining_time!=0 && f_p->arrival_time<=current){   //  끝나지 않았고, 도착했다면
+                if(f_p->cpu_burst_time<min){    //  제일 작다면
+                    min = f_p->cpu_burst_time;
+                    flag = i;
+                }
+            }
+        }
+
+        if(flag==-1){   //  실행 불가 -> +1초초
+            gantt_chart[current] = -1;
+            current++;
+            continue;
+        }
+
+        Process *r_p = &r_q->p_arr[flag];   //  현재 실행 중인 프로세스
+        if(p_started[flag]){
+            p_start[flag] = current;
+            p_started[flag] = 1;
+        }
+
+        gantt_chart[current] = r_p->pid;    //  ganttchart에 p0 등 저장장
+
+        r_p->remaining_time--;  //  매초 preemption 일어날 수 있으므로 1초만
+        current++;
+
+        if(r_p->remaining_time==0){ //  만약 끝나버렸다면
+            r_p->turnaround_time = current;
+            r_p->waiting_time = r_p->turnaround_time - r_p->arrival_time - r_p->cpu_burst_time;
+
+            total_turnaround += r_p->turnaround_time;
+            total_wait += r_p->waiting_time;
+
+            completed++;
+            if(current>finish_time) finish_time = current;  //  ganttchart 그릴 때 조금만 그리기 위해해
+        }
+    }
+
+    int prev = -100;    //  변화가 있을 때만 그리기기
+    for(int i=0;i<finish_time;i++){
+        if(gantt_chart[i]!=prev && gantt_chart[i]>=0){
+            printf("| P%d ",gantt_chart[i]);
+            prev = gantt_chart[i];
+        }
+    }
+    printf("|\n");
+
+    prev = -100;
+    printf("0");
+    for(int i=0;i<finish_time;i++){
+        if(gantt_chart[i]!=prev && gantt_chart[i]>=0){
+            printf("   %d ",i);
+            prev = gantt_chart[i];
+        }
+    }
+    printf("   %d\n\n\n",finish_time);
+
+    //  result_arr[1]에 sjf_np 결과값 저장장
+    strcpy(r->algorithm,"SJF(Preemptive)");
+    r->avg_waiting_time = total_wait/p_cnt;
+    r->avg_turnaround_time = total_turnaround/p_cnt;
+
+    //  할당된 메모리 해제제
+    free(r_q->p_arr);
+    free(r_q);
 }
 
 //  Priority(nonpreemptive)
 void priority_np(Process *p, Result *r){
+    Ready_queue *r_q = config(p_cnt+1); //  ready queue 생성 - config()
+    for(int i=0;i<p_cnt;i++) enqueue(r_q, p[i]);    //  enqueue
+
+    int completed=0, current=0; //  완료된 프로세스 갯수, 현재 시각
+    float total_wait=0, total_turnaround=0; //  result 위한 변수
+    int p_start[p_cnt], p_end[p_cnt];  //  Gantt-Chart 위한 변수수
+
+    printf("\nGantt-Chart : Priority(Non-preemptive)\n");
+
+    while(completed<p_cnt){
+        int flag=-1;
+        int min = 100;
+
+        for(int i=0;i<p_cnt;i++){
+            Process *f_p = &r_q->p_arr[i];
+            if(f_p->remaining_time!=0 && f_p->arrival_time<=current){
+                if(f_p->priority<min){
+                    min = f_p->priority;
+                    flag=i;
+                }
+            }
+        }
+
+        if(flag==-1){
+            current++;
+            continue;
+        }
+
+        Process *r_p = &r_q->p_arr[flag];
+        p_start[completed] = current;
+        if(completed==0 && p_start[0]!=0) printf(" | ");    //  0에 시작하지 않을 때 Gantt-Chart 프로세스 흐름
+
+        r_p->waiting_time = current - r_p->arrival_time;
+        while(r_p->remaining_time>0){
+            r_p->remaining_time--;
+            current++;
+        }
+
+        r_p->turnaround_time = current;
+        total_wait += r_p->waiting_time;
+        total_turnaround += r_p->turnaround_time;
+
+        p_end[completed] = current;
+        completed++;
+
+        printf("| P%d ",r_p->pid);
+    }
+    printf("|\n");
+
+    printf("0");
+    if(p_start[0]!=0) printf("  %d", p_start[0]);   //  P0가 0에 시작하지 않을 때 Gantt-Chart 시간 흐름
+    for(int i=0;i<p_cnt;i++) printf("   %d",p_end[i]);
+    printf("\n\n\n");
 
 }
 

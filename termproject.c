@@ -12,8 +12,8 @@ typedef struct{
     int pid;
     int arrival_time;
     int cpu_burst_time;
-    //int io_burst_time;
-    //int io_request_time;
+    int io_burst_time;
+    int io_request_time;
     int priority;
 
     //  기타 변수 - cpu scheduling simulator 구현 및 평가에 있어 추가적으로 필요한 변수
@@ -34,7 +34,15 @@ typedef struct{
 typedef struct{
     Process *p_arr;
     int cnt;
+    int capacity;
 } Ready_queue;
+
+typedef struct{
+    Process *w_arr;
+    int cnt;
+    int capacity;
+} Waiting_queue;
+
 
 //  함수 원형
 void create_processes(Process *p);
@@ -57,7 +65,7 @@ void evaulation(Result *r);
     Process ID, Arrival time, CPU burst time, I/O burst time, I/0 request time, Priority
     pid는 온 순서대로 정수값 설정, Arrival time & CPU burst time & I/O burst, request time & Priority -> random 값
     CPU burst time은 1에서 10 범위 설정 -> 지나치게 늘어지는 것을 막기 위함
-    I/O의 경우, 발생 횟수를 2~5회 범위 내 random 값 지정 -> 시간 소요 줄이기 위함
+    I/O의 경우, 발생 횟수를 2~3회 범위 내 random 값 지정 -> 시간 소요 줄이기 위함
     Priority의 경우, process의의 총 갯수 n 받아 0~(n-1) 중 random하게 배정
 */
 void create_processes(Process *p){
@@ -66,8 +74,8 @@ void create_processes(Process *p){
         p[i].pid = i;
         p[i].arrival_time = rand() % 10;
         p[i].cpu_burst_time = (rand() % 10)+1;
-        //p[i].io_burst_time = rand() % 3;
-        //p[i].io_request_time = rand() % 4;
+        p[i].io_burst_time = rand() % 3;
+        p[i].io_request_time = rand() % 4;
         p[i].priority = rand() % 5;
 
         p[i].remaining_time = p[i].cpu_burst_time;
@@ -87,6 +95,7 @@ Ready_queue *config(int capacity){
 
     r_q->p_arr = (Process*)malloc(sizeof(Process) * capacity);
     r_q->cnt = 0;
+    r_q->capacity = capacity;
 
     return r_q;
 }
@@ -255,8 +264,9 @@ void sjf_p(Process *p, Result *r){
 
     printf("\nGantt-Chart : SJF(preemptive)\n");
     
+    int flag=-1;
     while(completed<p_cnt){
-        int flag=-1;
+        
         int min = 100;
         for(int i=0;i<p_cnt;i++){
             Process *f_p = &r_q->p_arr[i];

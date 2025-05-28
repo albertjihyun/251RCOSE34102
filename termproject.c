@@ -34,7 +34,6 @@ typedef struct{
 typedef struct{
     Process *p_arr;
     int cnt;
-    int capacity;
 } Ready_queue;
 
 //  함수 원형
@@ -51,10 +50,10 @@ void sjf_p(Process *p,  Result *r);
 void priority_np(Process *p, Result *r);
 void priority_p(Process *p,  Result *r);
 void rr(Process *p, Result *r);
-void evaulation();
+void evaulation(Result *r);
 
 //  함수 정의
-/*  create_processes(): 프로세스 6개 생성 & 초기 변수값 설정 - random
+/*  create_processes(): 프로세스 4~6개 랜덤 생성 & 초기 변수값 설정 - random
     Process ID, Arrival time, CPU burst time, I/O burst time, I/0 request time, Priority
     pid는 온 순서대로 정수값 설정, Arrival time & CPU burst time & I/O burst, request time & Priority -> random 값
     CPU burst time은 1에서 10 범위 설정 -> 지나치게 늘어지는 것을 막기 위함
@@ -88,28 +87,25 @@ Ready_queue *config(int capacity){
 
     r_q->p_arr = (Process*)malloc(sizeof(Process) * capacity);
     r_q->cnt = 0;
-    r_q->capacity = capacity;
 
     return r_q;
 }
 
 //  큐에 프로세스 삽입
 void enqueue(Ready_queue *r_q, Process p){
-    if(r_q->cnt>=r_q->capacity);
-
     r_q->p_arr[r_q->cnt] = p;
     r_q->cnt++;
 }
 
 // evaluation에서 쓰일 qsort를 위한 compare
 int wait_compare(const void *a, const void *b){
-    Result *r1 = (Result*)r1;
-    Result *r2 = (Result*)r2;
+    Result *r1 = (Result*)a;
+    Result *r2 = (Result*)b;
     return r1->avg_waiting_time - r2->avg_waiting_time;
 }
 int turnaround_compare(const void *a, const void *b){
-    Result *r1 = (Result*)r1;
-    Result *r2 = (Result*)r2;
+    Result *r1 = (Result*)a;
+    Result *r2 = (Result*)b;
     return r1->avg_turnaround_time - r2->avg_turnaround_time;
 }
 //  fcfs,priority에서 쓰일 qsort를 위한 compare
@@ -128,7 +124,7 @@ void schedule(Process *p, Result *r){
     sjf_p(p,&r[2]);
     priority_np(p,&r[3]);
     priority_p(p,&r[4]);
-    //rr(p,&r[5]);
+    rr(p,&r[5]);
 }
 
 //  fcfs(): FCFS algorithm 구현
@@ -265,8 +261,8 @@ void sjf_p(Process *p, Result *r){
         for(int i=0;i<p_cnt;i++){
             Process *f_p = &r_q->p_arr[i];
             if(f_p->remaining_time!=0 && f_p->arrival_time<=current){   //  끝나지 않았고, 도착했다면
-                if(f_p->cpu_burst_time<min){    //  제일 작다면
-                    min = f_p->cpu_burst_time;
+                if(f_p->remaining_time<min){    //  제일 작다면
+                    min = f_p->remaining_time;
                     flag = i;
                 }
             }
@@ -300,7 +296,7 @@ void sjf_p(Process *p, Result *r){
     int prev = -100;    //  변화가 있을 때만 그리기기
     for(int i=0;i<finish_time;i++){
         if(gantt_chart[i]!=prev && gantt_chart[i]>=0){
-            if(i!=0 && prev==-100) printf("| | P%d ",gantt_chart[i]);
+            if(i!=0 && prev==-100) printf("| | P%d ",gantt_chart[i]);   //  0부터 시작하지 않을 때때
             else printf("| P%d ",gantt_chart[i]);
 
             prev = gantt_chart[i];
@@ -312,7 +308,7 @@ void sjf_p(Process *p, Result *r){
     printf("0");
     for(int i=0;i<finish_time;i++){
         if(gantt_chart[i]!=prev && gantt_chart[i]>=0){
-            if(i!=0) printf("   %d ",i);
+            if(i!=0) printf("   %d ",i);    //  0부터 시작하지 않을 때때
             prev = gantt_chart[i];
         }
     }
@@ -447,7 +443,7 @@ void priority_p(Process *p, Result *r){
     int prev = -100;    //  변화가 있을 때만 그리기기
     for(int i=0;i<finish_time;i++){
         if(gantt_chart[i]!=prev && gantt_chart[i]>=0){
-            if(i!=0 && prev==-100) printf("| | P%d ",gantt_chart[i]);
+            if(i!=0 && prev==-100) printf("| | P%d ",gantt_chart[i]);   //  0부터 시작하지 않을 때때
             else printf("| P%d ",gantt_chart[i]);
 
             prev = gantt_chart[i];
@@ -459,7 +455,7 @@ void priority_p(Process *p, Result *r){
     printf("0");
     for(int i=0;i<finish_time;i++){
         if(gantt_chart[i]!=prev && gantt_chart[i]>=0){
-            if(i!=0) printf("   %d ",i);
+            if(i!=0) printf("   %d ",i);    //  0부터 시작하지 않을 때때
             prev = gantt_chart[i];
         }
     }
@@ -482,20 +478,91 @@ void rr(Process *p, Result *r){
     
     qsort(r_q->p_arr, r_q->cnt, sizeof(Process), fcfs_compare); //  도착시간 기준 정렬
 
-    int current=0, completed=0, gantt_finish=0, queue_finish=0;
+    int current=0, completed=0, finish_time=0, head=0, tail=0, next=0;
     float total_wait=0, total_turnaround=0;
     int gantt_chart[200], rr_queue[1000], check[6];
-    int head=0, tail=0, next=0;
+    memset(check,0,sizeof(check));
 
-    printf("\nGantt-Chart : FCFS\n");
+    printf("\nGantt-Chart : Round-robin\n");
 
-    for(int i=0;i<p_cnt;i++){
-        Process *f_p = &r_q->p_arr[i];
-
+    while(p_cnt>next && r_q->p_arr[next].arrival_time <= current){
+        rr_queue[tail]=next;
+        tail++;
+        check[next]=1;
+        next++;
     }
 
+    while(completed<p_cnt){
+        if(head==tail){
+            gantt_chart[current]=-1;
+            current++;
+            while(p_cnt>next && r_q->p_arr[next].arrival_time <= current){
+                rr_queue[tail]=next;
+                tail++;
+                check[next]=1;
+                next++;
+            }
+            continue;
+        }
+
+        int flag = rr_queue[head];  //  실행할 프로세스, 머리에서 뽑음
+        head++;
+        Process *r_p = &r_q->p_arr[flag];
+
+        int exec;
+        if(r_p->remaining_time < time_quantum) exec = r_p->remaining_time;  //  남은 시간에 따라 작업 시간 상이
+        else exec = time_quantum;
+
+        for(int i=0;i<exec;i++){
+            r_p->remaining_time--;
+            gantt_chart[current]=r_p->pid;  //  exec만큼 실행, 간트 차트에도 저장
+            current++;
+
+            while(p_cnt>next && r_q->p_arr[next].arrival_time <= current){  //  프로세스 실시간 삽입
+                rr_queue[tail]=next;
+                tail++;
+                check[next]=1;
+                next++;
+            }
+        }
+
+        if(r_p->remaining_time==0){
+            r_p->turnaround_time=current;
+            r_p->waiting_time = r_p->turnaround_time-r_p->cpu_burst_time-r_p->arrival_time;
+            total_wait+=r_p->waiting_time;
+            total_turnaround+=r_p->turnaround_time;
+            completed++;
+            if(current>finish_time) finish_time = current;
+        }
+        else{
+            rr_queue[tail]=flag;    //  아직 남았다면 맨 뒤로
+            tail++;
+        }
+    }
+
+    int prev = -100;    //  변화가 있을 때만 그리기기
+    for(int i=0;i<finish_time;i++){
+        if(gantt_chart[i]!=prev && gantt_chart[i]>=0){
+            if(i!=0 && prev==-100) printf("| | P%d ",gantt_chart[i]);   //  0부터 시작하지 않을 때때
+            else printf("| P%d ",gantt_chart[i]);
+
+            prev = gantt_chart[i];
+        }
+    }
+    printf("|\n");
+
+    prev = -100;
+    printf("0");
+    for(int i=0;i<finish_time;i++){
+        if(gantt_chart[i]!=prev && gantt_chart[i]>=0){
+            if(i!=0) printf("   %d ",i);    //  0부터 시작하지 않을 때때
+            prev = gantt_chart[i];
+        }
+    }
+    printf("   %d\n\n\n",finish_time);
+
     //  result_arr[5]에 sjf_np 결과값 저장장
-    strcpy(r->algorithm, "SJF(Non-preemptive)");
+    strcpy(r->algorithm, "Round-robin");
     r->avg_waiting_time = total_wait/p_cnt;
     r->avg_turnaround_time = total_turnaround/p_cnt;
 

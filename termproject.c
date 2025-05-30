@@ -618,5 +618,6 @@ int main(){
 
     free(process_arr);  //  메모리 할당 해제
     free(result_arr);
+    
     return 0;
 }
